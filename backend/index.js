@@ -4,13 +4,41 @@ const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
-app.use(cors());
+
+// Configurar CORS para aceptar conexiones desde cualquier origen
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
 app.use(express.json());
+
+// Middleware para logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  next();
+});
+
+// Endpoint de prueba
+app.get("/test", (req, res) => {
+  console.log("Test endpoint hit!");
+  res.json({ status: "ok", message: "Backend is working!" });
+});
 
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
+  console.log("Mensaje recibido:", message);
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("Error: OPENAI_API_KEY no está configurada");
+    return res.status(500).json({ error: "Error: API key no configurada" });
+  }
 
   try {
+    console.log("Enviando solicitud a OpenAI...");
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -52,17 +80,33 @@ Tu estilo debe ser cercano, reflexivo y apasionado por los libros. Respondé sie
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
+        timeout: 30000, // 30 segundos de timeout
       }
     );
 
+    console.log("Respuesta recibida de OpenAI");
     res.json({ reply: response.data.choices[0].message.content });
   } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.status(500).json({ error: "Error al conectar con OpenAI" });
+    console.error("Error completo:", error);
+    if (error.response) {
+      console.error("Datos del error:", error.response.data);
+      console.error("Status del error:", error.response.status);
+    }
+    res.status(500).json({
+      error: "Error al conectar con OpenAI",
+      details: error.response?.data?.error?.message || error.message,
+    });
   }
 });
 
 const PORT = 3001;
-app.listen(PORT, () => {
+const HOST = "0.0.0.0";
+
+// Escuchar en todas las interfaces de red
+app.listen(PORT, HOST, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`También accesible en http://TU_IP_LOCAL:${PORT}`);
+  console.log("Para probar la conexión, visita:");
+  console.log(`http://localhost:${PORT}/test`);
+  console.log(`http://TU_IP_LOCAL:${PORT}/test`);
 });
