@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   Keyboard,
   Alert,
+  Dimensions,
 } from "react-native";
 import axios from "axios";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,11 +31,41 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  // Responsive width and chat height
+  const windowWidth = Dimensions.get("window").width;
+  const isWeb = Platform.OS === "web";
+  const cardMaxWidth = isWeb ? 700 : 400;
+  const cardPadding = isWeb ? 48 : 28;
+  const chatMinHeight = isWeb ? 320 : 180;
 
   // Verificar la conexión al backend al iniciar
   useEffect(() => {
     checkBackendConnection();
   }, []);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardOffset(e.endCoordinates.height);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardOffset(0);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [messages]);
 
   const checkBackendConnection = async () => {
     try {
@@ -115,75 +146,97 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#2D1B13" }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
       >
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.container}
-          onContentSizeChange={() => {
-            if (scrollViewRef.current) {
-              scrollViewRef.current.scrollToEnd({ animated: true });
-            }
-          }}
-        >
-          <Text style={styles.title}>📚 ChatGPT Book Assistant</Text>
-
-          {!isConnected && (
-            <View style={styles.connectionWarning}>
-              <Text style={styles.warningText}>No conectado al servidor</Text>
-              <TouchableOpacity
-                style={styles.retryButton}
-                onPress={checkBackendConnection}
-              >
-                <Text style={styles.retryButtonText}>Reintentar</Text>
-              </TouchableOpacity>
+        <View style={styles.centeredContainer}>
+          <View
+            style={[
+              styles.cardBox,
+              { maxWidth: cardMaxWidth, padding: cardPadding },
+            ]}
+          >
+            <View style={styles.logoContainer}>
+              <Text style={styles.logo}>☕️📖</Text>
             </View>
-          )}
-
-          {messages.map((msg, index) => (
+            <Text style={styles.welcomeTitle}>Bienvenido</Text>
+            <View style={styles.divider} />
+            <View style={[styles.chatScrollWrapper, { flex: 1 }]}>
+              <ScrollView
+                ref={scrollViewRef}
+                contentContainerStyle={[
+                  styles.chatContainer,
+                  { minHeight: chatMinHeight, paddingBottom: 12 },
+                ]}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={true}
+              >
+                {!isConnected && (
+                  <View style={styles.connectionWarning}>
+                    <Text style={styles.warningText}>
+                      No conectado al servidor
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.retryButton}
+                      onPress={checkBackendConnection}
+                    >
+                      <Text style={styles.retryButtonText}>Reintentar</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {messages.map((msg, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.messageBubble,
+                      msg.role === "user"
+                        ? styles.userMessage
+                        : styles.assistantMessage,
+                    ]}
+                  >
+                    <Text style={styles.messageText}>{msg.content}</Text>
+                  </View>
+                ))}
+                {loading && (
+                  <View style={styles.loading}>
+                    <ActivityIndicator size="small" color="#A68A64" />
+                    <Text style={{ marginLeft: 10, color: "#A68A64" }}>
+                      Pensando...
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
             <View
-              key={index}
               style={[
-                styles.messageBubble,
-                msg.role === "user"
-                  ? styles.userMessage
-                  : styles.assistantMessage,
+                styles.inputContainer,
+                { marginBottom: Platform.OS === "ios" ? keyboardOffset : 0 },
               ]}
             >
-              <Text style={styles.messageText}>{msg.content}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Contame qué buscás..."
+                placeholderTextColor="#A68A64"
+                value={message}
+                onChangeText={setMessage}
+                multiline
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!message.trim() || !isConnected) &&
+                    styles.sendButtonDisabled,
+                ]}
+                onPress={handleSend}
+                disabled={!message.trim() || !isConnected}
+              >
+                <Text style={styles.sendButtonText}>Enviar</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-
-          {loading && (
-            <View style={styles.loading}>
-              <ActivityIndicator size="small" />
-              <Text style={{ marginLeft: 10 }}>Pensando...</Text>
-            </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Contame qué buscás..."
-            value={message}
-            onChangeText={setMessage}
-            multiline
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!message.trim() || !isConnected) && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!message.trim() || !isConnected}
-          >
-            <Ionicons name="send" size={22} color="#fff" />
-          </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -191,14 +244,62 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    paddingBottom: 80,
+  centeredContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
   },
-  title: {
-    fontSize: 22,
+  cardBox: {
+    width: "95%",
+    backgroundColor: "#3E2417",
+    borderRadius: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    flex: 1,
+    minHeight: 400,
+  },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  logo: {
+    fontSize: 54,
+    marginBottom: 4,
+  },
+  welcomeTitle: {
+    fontSize: 28,
     fontWeight: "bold",
-    marginBottom: 20,
+    color: "#F5D7A1",
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#E2C9A0",
+    marginBottom: 18,
+    textAlign: "center",
+  },
+  divider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: "#A68A64",
+    marginBottom: 12,
+    opacity: 0.2,
+  },
+  chatScrollWrapper: {
+    flex: 1,
+    width: "100%",
+    minHeight: 100,
+  },
+  chatContainer: {
+    width: "100%",
+    marginBottom: 16,
+    paddingHorizontal: 2,
   },
   messageBubble: {
     padding: 12,
@@ -208,40 +309,51 @@ const styles = StyleSheet.create({
   },
   userMessage: {
     alignSelf: "flex-end",
-    backgroundColor: "#d1e7dd",
+    backgroundColor: "#A68A64",
   },
   assistantMessage: {
     alignSelf: "flex-start",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#E2C9A0",
   },
   messageText: {
     fontSize: 16,
+    color: "#3E2417",
   },
   inputContainer: {
     flexDirection: "row",
-    padding: 10,
-    borderTopWidth: 1,
-    borderColor: "#ccc",
-    backgroundColor: "#fff",
-    alignItems: "flex-end",
+    alignItems: "center",
+    width: "100%",
+    marginTop: 8,
+    backgroundColor: "transparent",
   },
   input: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    padding: 10,
+    minHeight: 44,
+    maxHeight: 90,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 20,
+    borderColor: "#A68A64",
+    borderRadius: 12,
+    backgroundColor: "#2D1B13",
+    color: "#F5D7A1",
     marginRight: 10,
+    fontSize: 16,
   },
   sendButton: {
-    backgroundColor: "#4A5568",
-    borderRadius: 20,
-    padding: 10,
+    backgroundColor: "#E2C9A0",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendButtonDisabled: {
-    backgroundColor: "#ccc",
+    backgroundColor: "#b8a07a",
+  },
+  sendButtonText: {
+    color: "#3E2417",
+    fontWeight: "bold",
+    fontSize: 16,
   },
   loading: {
     flexDirection: "row",
